@@ -4,11 +4,16 @@
 	import Terminal from '../lib/components/Terminal.svelte';
 </script>
 
-<Navbar />
+<div class="flex flex-col h-screen">
+	<div class="flex-shrink-0">
+		<Navbar />
+	</div>
 
-<div class="m-1 outline-dashed outline-blue-500">
-	<!-- <h1 class="text-teal-500">This is the main layout!</h1> -->
-	<slot />
+	<div class="flex-grow overflow-auto">
+		<slot />
+	</div>
+
+	<div class="flex-shrink-0 max-h-[30vh] overflow-y-auto">
+		<Terminal />
+	</div>
 </div>
-
-<Terminal />

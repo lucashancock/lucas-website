@@ -1,37 +1,75 @@
 <!-- src/lib/components/Terminal.svelte -->
-<script>
-	// import { onMount } from 'svelte';
-	import { writable } from 'svelte/store';
+<script lang="ts">
+	import { goto } from '$app/navigation';
+	import { output } from '../../stores/stores';
+	import { currentPath } from '../../stores/stores';
 
 	let input = '';
-	let output = writable([]);
-	let currentPath = writable('/');
 
-	// Define the structure of your website as a file system
-	// const fileSystem = {
-	// 	'/': ['about', 'contact', 'projects'],
-	// 	'/about': ['me', 'work', 'school', 'interests'],
-	// 	'/contact': ['e-mail', 'sendable-form'],
-	// 	'/projects': ['Project 1', 'Project 2'] // TO-DO: get projects from projects json data and load here dynamically.
-	// };
-
+	// Define the structure of the website as a file system
+	const fileSystem = new Map([
+		['/', ['about', 'contact', 'projects']],
+		['/about', ['me.txt', 'work.txt', 'school.txt', 'interests.txt']],
+		['/contact', ['e-mail.txt', 'sendable-form.txt']],
+		['/projects', ['Project 1.txt', 'Project 2.txt']]
+	]);
 	const commands = {
 		ls: () => {
-			// TO-DO: Implement ls functionality
-			console.log('Current path: ' + $currentPath);
-			console.log('Command: ' + input);
-			return 'ls finished';
+			let files = fileSystem.get($currentPath);
+			let output = '';
+			if (!files) throw new Error('files non existent');
+			files.forEach((file) => {
+				output += file + ' ';
+			});
+			return output;
 		},
-		cd: () => {
-			// TO-DO: Implement cd functionality
-			console.log('Current path: ' + $currentPath);
-			console.log('Command: ' + input);
-			return 'cd finished';
+		pwd: (args: string[]) => {
+			if (args.length != 0) return 'pwd: too many arguments';
+			else return $currentPath;
+		},
+		cd: (args: string[]) => {
+			if (args.length != 1) return 'cd: invalid number of arguments';
+			const targetDir = args[0];
+			let files = fileSystem.get($currentPath);
+			if (!files) return 'cd: files not found. try reloading';
+
+			if (targetDir === '..') {
+				if ($currentPath === '/') return 'cd: invalid command';
+				let path = $currentPath;
+				path = path.split('/').slice(0, -1).join('/') || '/';
+				currentPath.set(path);
+				goto(`${$currentPath}`);
+			} else if (!files.includes(targetDir) || targetDir.endsWith('.txt')) {
+				return 'cd: directory does not exist';
+			} else {
+				currentPath.set($currentPath + targetDir);
+				goto(`${$currentPath}`);
+			}
+			return '';
+		},
+		cat: (args: string[]) => {
+			if (args.length != 1) return 'cat: invalid number of arguments';
+			const file = args[0];
+			const files = fileSystem.get($currentPath);
+			if (!files) return 'cat: files not found. try reloading';
+			if (file.endsWith('.txt') && files.includes(file)) {
+				const fileName = file.replace('.txt', '');
+				goto(`${$currentPath}/${fileName}`);
+
+				return 'cat: file found';
+			} else {
+				return 'cat: file not found';
+			}
 		},
 		clear: () => {
-			// TO-DO: Implement clear functionality. Have it just clear the outputs array.
-			// Also potentially make it so that the outputs array can only hold a certain number of values.
-			return 'clear finished';
+			// $output.length = 0;
+			output.clear();
+		},
+		help: () => {
+			return 'commands: pwd, ls, cd, clear, cat, help.';
+		},
+		other: () => {
+			return 'command not recognized. try `help` for a list of commands.';
 		}
 	};
 
@@ -41,41 +79,59 @@
 		let result = '';
 
 		if (cmd === 'ls') {
-			console.log('ls command recognized in handleCommand');
-			console.log('If any args were provided, they are this: ' + args);
-			console.log('Calling the command...');
 			result = commands.ls();
 		} else if (cmd === 'cd') {
-			console.log('cd command recognized in handleCommand');
-			console.log('If any args were provided, they are this: ' + args);
-			console.log('Calling the command...');
-			result = commands.cd();
+			result = commands.cd(args);
 		} else if (cmd === 'clear') {
-			result = commands.clear();
+			commands.clear();
+		} else if (cmd === 'pwd') {
+			result = commands.pwd(args);
+		} else if (cmd === 'help') {
+			result = commands.help();
+		} else if (cmd === 'cat') {
+			result = commands.cat(args);
+		} else {
+			result = commands.other();
+		}
+		if (result) {
+			// $output = [...$output, `${result}`];
+			output.add(`${result}`);
 		}
 
-		if (result) {
-			console.log('Pushing result: ' + result + ' onto the stack.');
-			$output = [...$output, `> ${input} : ${result}`];
-			console.log('Output: ' + $output);
-		}
 		input = ''; // reset the input back to empty string
 	};
 </script>
 
-<div class="bg-black text-green-700 p-4 font-mono">
+<div class="w-full outline outline-green-800"></div>
+<div
+	class="bg-black text-green-500 text-xl p-4 outline outline-green-500 font-mono overscroll-none overflow-y-hidden"
+>
+	<div class="flex">
+		<div class="mb-3 text-2xl py-1 underline underline-offset-8 w-full">mini-term-emu</div>
+	</div>
+	{#if $output.length == 0}
+		<div class="font-semibold">type 'help' for a list of commands</div>{/if}
 	<div>
 		{#each $output as line}
-			<div>{line}</div>
+			<div class="flex justify-between">
+				<div>{line[0]}</div>
+				<!-- Check if command failed or not and display check or x -->
+				{#if line[0]}
+					<div>&checkmark; @ {line[1]}</div>
+				{/if}
+			</div>
 		{/each}
 	</div>
-	<div>
-		<span>{$currentPath} $</span>
+	<div class="flex">
+		<span class="flex-initial">{$currentPath} $:</span>
+
+		<!-- svelte-ignore a11y-autofocus -->
 		<input
-			class="border-none bg-inherit text-inherit outline-none"
+			class="pl-3 text-xl flex-grow bg-inherit text-inherit outline-none block-cursor"
 			type="text"
 			bind:value={input}
 			on:keydown={(e) => e.key === 'Enter' && handleCommand()}
+			autofocus
 		/>
 	</div>
 </div>
